@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { GoogleOAuthProvider, useGoogleLogin } from '@react-oauth/google';
 import {type ChangeEvent } from 'react';
 
-const CLIENT_ID = '820781720380-vmhts2blfu0tt98aq6g3bic4oejjl3qu.apps.googleusercontent.com';
+const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 const STAFE_LIST = ['丸山さん','家吉さん','榮福さん','市邊さん','中野さん','大峡さん','太田さん'];
 
 function AppContent() {
