@@ -4,7 +4,7 @@
 自身のパソコンでgoogle calendarに登録できるようする
 
 ## アプリURL（デプロイ先）
-https://your-app-url.com/
+https://
 （※必ず一番目立つ上部にURLを配置し、クリックですぐ飛べるようにします）
 
 ## 📸 画面イメージ
