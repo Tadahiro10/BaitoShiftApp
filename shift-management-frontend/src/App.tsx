@@ -120,7 +120,24 @@ if (authStatus === 'loggedOut') {
           whiteSpace: 'pre-line',
       }}>{notice.type === 'success' ? '✅ ' : '⚠️ '}{notice.text}</div>)}
       
-      <h2 style={{ textAlign: 'center', margin: '0 0 20px 0', color: '#333' }}>シフト登録</h2>
+      {/* ヘッダー：タイトル + ログインユーザー */}
+      <div style={{ position: 'relative', marginBottom: '20px' }}>
+        <h2 style={{ textAlign: 'center', margin: 0, color: '#333' }}>シフト登録</h2>
+        <div style={{
+          position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)',
+          display: 'flex', alignItems: 'center', gap: '12px', fontSize: '14px', color: '#555',
+        }}>
+          <span>👤 {userName || 'Googleユーザー'} でログイン中</span>
+          <form action="http://localhost:8080/logout" method="post" style={{ margin: 0 }}>
+          <button type="submit" style={{
+            padding: '6px 12px', border: '1px solid #ccc', borderRadius: '6px',
+            backgroundColor: '#fff', cursor: 'pointer', fontSize: '13px',
+          }}>
+            ログアウト
+            </button>
+          </form>
+        </div>
+      </div>
       
       <div style={{ display: 'flex', flex: 1, gap: '20px', overflow: 'hidden' }}>
         
