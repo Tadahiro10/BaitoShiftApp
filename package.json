@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "react-dropzone": "^15.0.0",
+    "react-zoom-pan-pinch": "^4.0.3"
+  }
+}

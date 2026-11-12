@@ -1,287 +1,185 @@
-import React, { useState } from 'react';
-import { GoogleOAuthProvider, useGoogleLogin } from '@react-oauth/google';
-import {type ChangeEvent } from 'react';
+import React, { useState, useEffect } from 'react';
+import ShiftUploader from './components/ShiftUploader';
+import ShiftTabulate from './components/ShiftTabulate';
+import ShiftCompare from './components/ShiftCompare'
+//import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 
-const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-//const CLIENT_id = "820781720380-vmhts2blfu0tt98aq6g3bic4oejjl3qu.apps.googleusercontent.com"; 
-const STAFE_LIST = ['丸山さん','家吉さん','榮福さん','市邊さん','中野さん','大峡さん','太田さん'];
+export interface ShiftData {
+  workDate: string;      // yyyy-MM-dd
+  startTime: string;     // HH:mm
+  endTime: string;       // HH:mm
+  taskCode: string;
+  partnerName1: string;
+  partnerName2: string;
+  partnerTask1: string;
+  partnerTask2: string;
+}
 
-function AppContent() {
-  // --- ① 記憶ボックス ---
-  const [workDate, setWorkDate] = useState('');
-  const [startTime, setStartTime] = useState('');
-  const [endTime, setEndTime] = useState('');
-  const [taskCode, setTaskCode] = useState('');
-  const [partnerName1, setPartnerName1] = useState('');
-  const [partnerTask1, setPartnerTask1] = useState('');
-  const [partnerName2, setPartnerName2] = useState('');
-  const [partnerTask2, setPartnerTask2] = useState('');
-  
-  // 🔑 新規追加：Googleのカギ（アクセストークン）を保存する箱
-  const [accessToken, setAccessToken] = useState('');
+const App: React.FC = () => {
+  const [shiftData, setShiftData] = useState<ShiftData[]>([]); // 編集・送信用データ
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);  // 比較用画像URL
+  const [isComparing, setIsComparing] = useState(false);   // モード切替フラグ
+  const [notice, setNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);// 画面上部に出す通知(null のときは非表示)
+  const [isRegistering, setIsRegistering] = useState(false);// 登録処理中かどうか(ボタンの連打防止)
+  const [authStatus, setAuthStatus] = useState<'checking' | 'loggedIn' | 'loggedOut'>('checking');
+  const [userName, setUserName] = useState('');
 
-  // --- ② ログイン処理 ---
-  const login = useGoogleLogin({
-    onSuccess: (tokenResponse) => {
-      console.log('特別な鍵を取得:', tokenResponse.access_token);
-      setAccessToken(tokenResponse.access_token); // 🔑 もらったカギを箱にしまう！
-      alert('Googleカレンダー連携の準備が整いました！');
-    },
-    onError: () => console.log('ログイン失敗'),
-    scope: 'https://www.googleapis.com/auth/calendar.events',
-  });
+  // ShiftUploaderから「Spring Bootでの処理結果」を受け取る
+  const handleProcessCompleted = (data: ShiftData[]) => {
+    setShiftData(data);
+  };
 
-  // --- ③ フォーム送信処理（DB保存 ＋ カレンダー連携） ---
-  const handleSubmit = async (e: React.SyntheticEvent) => {
-    e.preventDefault();
-
-    // カギを持っていない（ログインしていない）場合は警告して止める
-    if (!accessToken) {
-      alert('先に「Googleでログイン」ボタンを押して、カレンダー連携を許可してください！');
-      return;
-    }
-
-    // ---Spring Boot（データベース）への送信 ---
-    const shiftData = {
-      workDate, startTime, endTime, taskCode, 
-      partnerName1, partnerTask1, partnerName2, partnerTask2
-    };
-
+  // 最終確認後、Googleカレンダーに登録する処理（Java側へ送信）
+  const handleRegisterCalendar = async () => {
+    setIsRegistering(true);
     try {
-      // Spring Bootへの通信
-      const dbResponse = await fetch('http://localhost:8080/shift', {
+      const response = await fetch('http://localhost:8080/api/shifts/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(shiftData),
+        credentials: 'include',
       });
-
-      if (!dbResponse.ok) {
-        throw new Error('データベースへの保存に失敗しました');
+      if (response.status === 401) {
+        // 未ログインならGoogleログインへ
+        window.location.href = 'http://localhost:8080/oauth2/authorization/google';
+        return;
       }
-
-      // --- 【後半】Googleカレンダーへの送信 ---
-      // Googleが読める形式（RFC3339）に日付と時間を合体させる（日本時間 +09:00）
-      const startDateTime = `${workDate}T${startTime}:00+09:00`;
-      const endDateTime = `${workDate}T${endTime}:00+09:00`;
-
-      // Googleカレンダー用のデータ構造
-      const calendarEvent = {
-        summary: ` (${taskCode}ライン)`, // カレンダーに表示されるタイトル
-        description: `${partnerName1}(${partnerTask1})\n${partnerName2}(${partnerTask2})`, // メモ欄
-        start: { dateTime: startDateTime, timeZone: 'Asia/Tokyo' },
-        end: { dateTime: endDateTime, timeZone: 'Asia/Tokyo' },
-      };
-
-      // GoogleカレンダーAPIへ通信！
-      const calResponse = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`, // 🔑 ここで特別なカギを見せる！
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(calendarEvent),
-      });
-
-      if (calResponse.ok) {
-        alert('🎉 大成功！データベース保存とGoogleカレンダーへの登録が完了しました！');
+      if (response.ok) {
+        setNotice({ type: 'success', text: 'Googleカレンダーへの登録が完了しました🎉' });
       } else {
-        alert('データベースには保存されましたが、カレンダー登録に失敗しました。');
+        const message = await response.text(); // Spring Boot から返ってきたエラー文
+        setNotice({ type: 'error', text: message || '登録に失敗しました。' });
+        alert("登録に失敗しました。");
       }
-
-    } catch (error) {
-      console.error('通信エラー:', error);
-      alert('システムエラーが発生しました。');
+    } catch (e) {
+      alert("通信エラーが発生しました。");
+    } finally {
+    setIsRegistering(false);
     }
   };
-  //I, G, Hラインを入力したら開始、終了時間を自動入力できる
-  const handleTaskChange = (e:ChangeEvent<HTMLSelectElement>) => {
-    const Task = e.target.value;
-    setTaskCode(Task);
-
-    if (Task === 'I') {
-      setStartTime('17'); // 自動で時間を決める
-      setEndTime('22')
-    } else if(Task === 'G'||'H') {
-      setStartTime('18');
-      setEndTime('23');
-    }
-    else{
-      setStartTime('');
-      setEndTime('');
-    }
-  }
-
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(null), 6000);
+    return () => clearTimeout(timer);
+  }, [notice]);
+  useEffect(() => {
+  fetch('http://localhost:8080/api/auth/status', { credentials: 'include' })
+    .then(res => res.json())
+    .then(data => {
+      if (data.loggedIn) {
+        setUserName(data.name ?? '');
+        setAuthStatus('loggedIn');
+      } else {
+        setAuthStatus('loggedOut');
+      }
+    })
+    .catch(() => setAuthStatus('loggedOut'));
+}, []);
+  //確認中
+if (authStatus === 'checking') {
   return (
-      <div style={{ padding: '50px', textAlign: 'center', fontFamily: 'sans-serif' }}>
-        <h2>シフト登録アプリ</h2>
-                
-        {/* ログインボタンエリア */}
-        <div style={{ marginBottom: '10px' }}>
-          <button 
-            onClick={() => login()} 
-            style={{ padding: '10px 20px', fontSize: '16px', cursor: 'pointer', backgroundColor: '#4285F4', color: 'white', border: 'none', borderRadius: '5px' }}
-          >
-            Googleでログイン（カレンダー連携）
-          </button>
-        </div>
-  
-        <hr style={{ marginBottom: '30px', borderColor: '#ccc' }} />
+    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888' }}>
+      ログイン状態を確認中...
+    </div>
+  );
+}
 
-        {/* シフト入力フォームエリア */}
-        <h3>シフトを入力する</h3>
+// 未ログイン:ログイン画面だけを表示
+if (authStatus === 'loggedOut') {
+  return (
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '20px', backgroundColor: '#f5f7f9', fontFamily: 'sans-serif' }}>
+      <h2 style={{ margin: 0, color: '#333' }}>シフト登録</h2>
+      <p style={{ margin: 0, color: '#666' }}>
+        Googleカレンダーに登録するため、最初にGoogleアカウントでログインしてください。
+      </p>
+      <a
+        href="http://localhost:8080/oauth2/authorization/google"
+        style={{ padding: '12px 32px', backgroundColor: '#1a73e8', color: '#fff', borderRadius: '8px', textDecoration: 'none', fontWeight: 'bold', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}
+      >
+        Googleでログイン
+      </a>
+    </div>
+  );
+}
+  return (
+    <div style={{ padding: '30px', fontFamily: 'sans-serif', height: '100%', width: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', backgroundColor: '#f5f7f9' }}>
+      {notice && (
+        <div style={{
+          position: 'fixed',
+          top: '20px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          padding: '12px 24px',
+          borderRadius: '8px',
+          color: '#fff',
+          fontWeight: 'bold',
+          backgroundColor: notice.type === 'success' ? '#4caf50' : '#d32f2f',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          zIndex: 1000,
+          animation: 'slideDown 0.3s ease-out',
+          whiteSpace: 'pre-line',
+      }}>{notice.type === 'success' ? '✅ ' : '⚠️ '}{notice.text}</div>)}
+      
+      <h2 style={{ textAlign: 'center', margin: '0 0 20px 0', color: '#333' }}>シフト登録</h2>
+      
+      <div style={{ display: 'flex', flex: 1, gap: '20px', overflow: 'hidden' }}>
         
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px', width: '100%', maxWidth: '600px' }}>
+        {/* === 左カラム：入力 or 画像比較 (flex: 1 で画面の 1/3 を占める) === */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', border: '1px solid #ccc', borderRadius: '8px', padding: '20px', backgroundColor: '#fff', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+          {!isComparing ? (
+            //JSONファイルの読み込み
             <div>
-              <label>日付: </label>
-              <input type="date"  value={workDate}  onChange={(e) => setWorkDate(e.target.value)} required
-              style={{
-                padding: '12px 15px',
-                fontSize: '16px',
-                border: '2px solid #ddd',
-                borderRadius: '8px',
-                backgroundColor: '#fff',
-                color: '#333',
-                width: '100%',
-                maxWidth: '150px',
-                cursor: 'pointer'
-              }}
-               />
-            </div>
-
-            <div>
-              <label>パートナー1: </label>
-              <select 
-                value={partnerName1} 
-                onChange={(e) => setPartnerName1(e.target.value)} 
-                required 
-                style={{ padding: '5px', fontSize: '16px' }} // 少し見栄えを良くするためのオマケ
-              >
-                <option value="">入力してください</option>
-                {STAFE_LIST.map((staffName) =>(
-                  <option
-                  key={staffName}
-                  value={staffName}
-                  disabled={staffName === partnerName2}
-                  >
-                    {staffName}
-                  </option>
-                ))}
-                </select>
-            </div>
-
-            <div>
-              <label>タスク1: </label>
-              <select 
-                value={partnerTask1} 
-                onChange={(e) => setPartnerTask1(e.target.value)} 
-                required 
-                style={{ padding: '5px', fontSize: '16px' }} // 少し見栄えを良くするためのオマケ
-              >
-                <option value="">選択してください</option>
-                <option value="I">I</option>
-                <option value="G">G</option>
-                <option value="H">H</option>
-              </select>
-            </div>
-
-            <div>
-              <label>開始時間: </label>
-              <select 
-                value={startTime} 
-                onChange={(e) => setStartTime(e.target.value)} 
-                required
-                style={{ padding: '5px', fontSize: '16px'}}
-                >
-                  <option value=""> 時間を選択してください</option>]
-                  <option value="17">17:00</option>
-                  <option value="18">18:00</option>
-                </select>
-            </div>
-
-            <div>
-              <label>パートナー2: </label>
-              <select 
-                value={partnerName2} 
-                onChange={(e) => setPartnerName2(e.target.value)} 
-                required 
-                style={{ padding: '5px', fontSize: '16px' }} // 少し見栄えを良くするためのオマケ
-              >
-                <option value="">入力してください</option>
-                {STAFE_LIST.map((staffName) => (
-                  <option
-                    key={staffName}
-                    value={staffName}
-                    disabled={staffName === partnerName1}
-                    >
-                      {staffName}
-                    </option>
-                ))}
-                </select>
-            </div>
-
-            <div>
-              <label>タスク2: </label>
-              <select   
-                value={partnerTask2} 
-                onChange={(e) => setPartnerTask2(e.target.value)} 
-                required
-                style={{ padding: '5px', fontSize: '16px' }} // 少し見栄えを良くするためのオマケ
-              >
-                <option value="">選択してください</option>
-                <option value="I">I</option>
-                <option value="G">G</option>
-                <option value="H">H</option>
-              </select>
-            </div>
-
-            <div>
-              <label>終了時間: </label>
-              <select 
-              value={endTime} 
-              onChange={(e) => setStartTime(e.target.value)} 
-              required
-              style={{ padding: '5px', fontSize: '16px'}}
-              >
-                <option value=""> 時間を選択してください</option>]
-                <option value="22">22:00</option>
-                <option value="23">23:00</option>
-              </select>            
-            </div>
-            <div>
-              <label>自分のタスク: </label>
-              <select   
-                value={taskCode} 
-                onChange={handleTaskChange} 
-                required
-                style={{ padding: '5px', fontSize: '16px' }} // 少し見栄えを良くするためのオマケ
-              >
-                <option value="">選択してください</option>
-                <option value="I">I</option>
-                <option value="G">G</option>
-                <option value="H">H</option>
-              </select>
+              <h3 style={{ marginTop: 0, color: '#1a73e8' }}>シフトデータの読み込み(JSONファイルを選択してください)</h3>
+              <ShiftUploader onSuccess={handleProcessCompleted} />
             </div>
             
-          </div> {/* Gridの箱はここまで */}
-
-          <button type="submit" style={{ padding: '10px 30px', fontSize: '16px', cursor: 'pointer', marginTop: '20px' }}>
-            登録する
-          </button>
+          ) : (
+            //画像比較のコンポーネントから操作する
+            <ShiftCompare
+              previewUrl={previewUrl}
+              onImageUpload={setPreviewUrl} // App.tsxのsetPreviewUrlを渡す
+              onBack={() => setIsComparing(false)}
+            />
+          )}
+        </div>
+      
+        {/* === 右カラム：プレビュー・編集・登録 (flex: 2 で画面の 2/3 を占める) === */}
+        <div style={{ flex: 2, display: 'flex', flexDirection: 'column', border: '1px solid #ccc', borderRadius: '8px', padding: '20px', backgroundColor: '#fff', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+          <h3 style={{ marginTop: 0, color: '#333' }}>プレビュー・編集</h3>
           
-        </form>
+          {/* 表エリア */}
+          <div style={{ flex: 1, overflowY: 'auto', border: '1px solid #eee', borderRadius: '4px', backgroundColor: '#fafafa' }}>
+            {shiftData.length > 0 ? (
+              <ShiftTabulate data={shiftData} onChange={setShiftData} />
+            ) : (
+              <div style={{ color: '#888', textAlign: 'center', marginTop: '10%' }}>
+                左側でデータを読み込み、自分の担当の日がここに表が表示されます。
+              </div>
+            )}
+          </div>
+  
+          {/* 下部アクションエリア */}
+          <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid #eee' }}>
+            {!isComparing ? (
+              <div 
+                onClick={() => setIsComparing(true)}
+                style={{ textAlign: 'center', color: '#1a73e8', cursor: 'pointer', fontWeight: 'bold', textDecoration: 'underline', padding: '10px' }}
+              >
+                🖼️ 写真と比較する
+              </div>
+            ) : (
+            <button
+              onClick={handleRegisterCalendar}
+              disabled={isRegistering}
+              style={{ width: '100%', padding: '15px', backgroundColor: isRegistering ? '#ccc' : '#4caf50', color: '#fff', fontSize: '16px', fontWeight: 'bold', border: 'none', borderRadius: '8px', cursor: isRegistering ? 'not-allowed' : 'pointer', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
+                {isRegistering ? '登録中...' : '✅ 確認OK!Googleカレンダーに登録する'}
+            </button>
+            )}
+          </div>
+        </div>
       </div>
-    //</GoogleOAuthProvider>
+    </div>
   );
-}
-
-function App() {
-  return (
-    <GoogleOAuthProvider clientId={CLIENT_ID}>
-      {/* 上で作った中身をここで呼び出す */}
-      <AppContent />
-    </GoogleOAuthProvider>
-  );
-}
+};
 
 export default App;

@@ -1,0 +1,8 @@
+[
+  {"workDate":"2026-11-15","startTime":"17:00","endTime":"22:00","taskCode":"G","partnerName1":"E列","partnerTask1":"I","partnerName2":"H列","partnerTask2":"H"},
+  {"workDate":"2026-11-16","startTime":null,"endTime":null,"taskCode":"希望休","partnerName1":"A列","partnerTask1":"I","partnerName2":"G列","partnerTask2":"G"},
+  {"workDate":"2026-11-17","startTime":"17:00","endTime":"22:00","taskCode":"G","partnerName1":"C列","partnerTask1":"H","partnerName2":null,"partnerTask2":null},
+  {"workDate":"2026-11-18","startTime":"17:00","endTime":"22:00","taskCode":"H","partnerName1":"D列","partnerTask1":"I","partnerName2":"E列","partnerTask2":"G"},
+  {"workDate":"2026-11-19","startTime":"17:00","endTime":"22:00","taskCode":"G","partnerName1":"A列","partnerTask1":"H","partnerName2":"D列","partnerTask2":"I"},
+  {"workDate":"2026-11-20","startTime":null,"endTime":null,"taskCode":"希望休","partnerName1":"C列","partnerTask1":"I","partnerName2":"F列","partnerTask2":"H"}
+]

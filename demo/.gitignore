@@ -6,7 +6,9 @@ build/
 !**/src/test/**/build/
 
 ### PW of DB ###
+application.properties
 application-local.properties 
+application-dev.properties 
 
 ### STS ###
 .apt_generated
